@@ -1,0 +1,43 @@
+name: Full CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push Image
+        run: |
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/petclinic:latest .
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/petclinic:latest
+
+  deploy-to-server:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute Remote SSH Commands
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            # Go to project folder
+            cd ~/spring-petclinic
+            # Pull latest changes from GitHub
+            git pull origin main
+            # Restart the infrastructure with new image
+            docker-compose down
+            docker-compose up -d
+            echo "Deployment successful on 3.110.55.13"

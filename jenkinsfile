@@ -1,0 +1,58 @@
+pipeline {
+    agent any
+
+    environment {
+        // Replace 'deepakvsnv' with your actual Docker Hub username
+        DOCKER_HUB_USER = 'deepakvsnv'
+        // Ensure you have created credentials in Jenkins with ID 'docker-cred'
+        DOCKER_CREDENTIALS = credentials('docker-cred')
+    }
+
+    stages {
+        stage('Checkout Source') {
+            steps {
+                echo 'Fetching code from GitHub...'
+                git branch: 'main', url: 'https://github.com/deepakvsnv135/spring-petclinic.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo 'Starting Docker Build process...'
+                sh "docker build -t my-app ."
+            }
+        }
+
+        stage('Login & Push to Docker Hub') {
+            steps {
+                echo 'Authenticating with Docker Hub...'
+                sh "echo ${DOCKER_CREDENTIALS_PSW} | docker login -u ${DOCKER_CREDENTIALS_USR} --password-stdin"
+                
+                echo 'Tagging and Pushing Image...'
+                sh "docker tag my-app ${DOCKER_HUB_USER}/my-app:latest"
+                sh "docker push ${DOCKER_HUB_USER}/my-app:latest"
+            }
+        }
+
+        stage('Cleanup & Deploy') {
+            steps {
+                echo 'Deploying application to environment...'
+                // Stopping and removing existing container to avoid port conflicts
+                sh "docker stop petclinic-container || true"
+                sh "docker rm petclinic-container || true"
+                
+                // Running the new container in detached mode (-d)
+                sh "docker run -d -p 8000:8080 --name petclinic-container my-app"
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Deployment Completed Successfully!'
+        }
+        failure {
+            echo 'Deployment Failed. Please check Jenkins logs.'
+        }
+    }
+}
