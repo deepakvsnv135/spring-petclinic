@@ -1,10 +1,11 @@
-name: Full CI/CD Pipeline
+name: Full CI/CD Pipeline for PetClinic
 
 on:
   push:
     branches: [ "main" ]
 
 jobs:
+  # Stage 1: Continuous Integration (Build & Push)
   build-and-push:
     runs-on: ubuntu-latest
     steps:
@@ -19,9 +20,12 @@ jobs:
 
       - name: Build and Push Image
         run: |
+          # Building image from Dockerfile
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/petclinic:latest .
+          # Pushing to Docker Hub Registry
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/petclinic:latest
 
+  # Stage 2: Continuous Deployment (SSH to AWS & Restart)
   deploy-to-server:
     needs: build-and-push
     runs-on: ubuntu-latest
@@ -33,11 +37,21 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            # Go to project folder
+            # 1. Navigate to your project directory
             cd ~/spring-petclinic
-            # Pull latest changes from GitHub
+            
+            # 2. Pull latest code from GitHub (optional if using Docker Compose only)
             git pull origin main
-            # Restart the infrastructure with new image
-            docker-compose down
+            
+            # 3. Handling Port Conflicts & Old Containers
+            # If you want to use Docker Compose (Recommended for DB connection):
+            docker-compose down || true
+            docker-compose pull
             docker-compose up -d
-            echo "Deployment successful on 3.110.55.13"
+            
+            # If you want to run purely via Docker Run with specific Port Mapping (e.g., 9090):
+            docker stop petclinic-container || true
+            docker rm petclinic-container || true
+            docker run -d -p 8000:8080 --name petclinic-container ${{ secrets.DOCKERHUB_USERNAME }}/petclinic:latest
+            
+            echo "Deployment successful on ${{ secrets.SERVER_IP }}!"
